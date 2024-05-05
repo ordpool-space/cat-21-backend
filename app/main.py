@@ -35,12 +35,12 @@ class StatusResult(BaseModel):
     uptime: int
 
 class Cat(BaseModel):
-    cat_number: int
-    block_height: int
-    minted_at: datetime.datetime
-    minted_by: str
-    feerate: float
-    tx_hash: str
+    catNumber: int
+    blockHeight: int
+    mintedAt: str
+    mintedBy: str
+    feeRate: float
+    txHash: str
 
 class Cat21PaginatedResult(BaseModel):
     cats: List[Cat]
@@ -86,18 +86,18 @@ def on_startup():
         )
         for item in cur.fetchall():
             cat = Cat(
-                cat_number=item["cat_number"],
-                block_height=item["block_height"],
-                minted_at=item["minted_at"],
-                minted_by=item["minted_by"],
-                feerate=item["feerate"],
-                tx_hash=item["tx_hash"],
+                catNumber=item["cat_number"],
+                blockHeight=item["block_height"],
+                mintedAt=item["minted_at"].isoformat(),
+                mintedBy=item["minted_by"],
+                feeRate=item["feerate"],
+                txHash=item["tx_hash"],
             )
             all_cats.append(cat)
-            cat_by_number[cat.cat_number] = cat
-            cat_by_minted_by[cat.minted_by].append(cat)
+            cat_by_number[cat.catNumber] = cat
+            cat_by_minted_by[cat.mintedBy].append(cat)
         logging.info(f"Loaded {len(all_cats)} cats into in-memory cache")
-        assert cat_by_number[0].minted_by == "bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh"
+        assert cat_by_number[0].mintedBy == "bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh"
 
 def on_shutdown():
     pass
@@ -136,13 +136,21 @@ async def get_status():
 # API endpoint /api/cats/{itemsPerPage}/{currentPage}
 @app.get("/api/cats/{itemsPerPage}/{currentPage}", response_model=Cat21PaginatedResult)
 async def get_cats(itemsPerPage: int = 10, currentPage: int = 1):
+    # Input validation
+    if currentPage < 1 or itemsPerPage < 1:
+        raise HTTPException(404, {
+            "statusCode": 404,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "path": f"/api/cats/{itemsPerPage}/{currentPage}",
+            "message": "Invalid input parameters"
+            }
+        )
+
     # Calculate how many pages we got
     total_pages = math.ceil(1.0 * len(all_cats) / itemsPerPage)
 
-    # Calculate the offset based on currentPage that counts from 1
-    offset = (currentPage - 1) * itemsPerPage
-    if offset > len(all_cats):
-        # Pagination beyond end of list
+    # Check that we are within bounds
+    if currentPage > total_pages:
         raise HTTPException(404, {
             "statusCode": 404,
             "timestamp": datetime.datetime.now().isoformat(),
@@ -150,6 +158,9 @@ async def get_cats(itemsPerPage: int = 10, currentPage: int = 1):
             "message": "Pagination beyond end of list"
             }
         )
+
+    # Calculate the offset based on currentPage that counts from 1
+    offset = (currentPage - 1) * itemsPerPage
 
     # Get the cats from the in-memory cache
     cats = all_cats[offset : offset + itemsPerPage]
