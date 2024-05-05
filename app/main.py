@@ -1,5 +1,6 @@
 import os
 import sys
+import math
 import time
 import logging
 import datetime
@@ -43,9 +44,10 @@ class Cat(BaseModel):
 
 class Cat21PaginatedResult(BaseModel):
     cats: List[Cat]
-    totalResults: int
-    itemsPerPage: int
     currentPage: int
+    itemsPerPage: int
+    totalResults: int
+    totalPages: int
 
 
 def get_db_connection():
@@ -79,7 +81,7 @@ def on_startup():
             SELECT cat_number, block_height, minted_at, minted_by, feerate, tx_hash
             FROM cats
             ORDER BY cat_number ASC
-            LIMIT 10
+            LIMIT 100
             """
         )
         for item in cur.fetchall():
@@ -97,24 +99,25 @@ def on_startup():
         logging.info(f"Loaded {len(all_cats)} cats into in-memory cache")
         assert cat_by_number[0].minted_by == "bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh"
 
+def on_shutdown():
+    pass
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Logic on startup
     on_startup()
-
     # Ready to process requests
     yield
-
     # Logic on shutdown
-    # ...
+    on_shutdown()
 
 
 # Initialize FastAPI app
 app = FastAPI(
     title="CAT-21 Indexer API",
     description="Meow! Rescue the cats!",
-    version="2.0",
+    version="1.337",
     lifespan=lifespan
 )
 
@@ -132,8 +135,11 @@ async def get_status():
 
 # API endpoint /api/cats/{itemsPerPage}/{currentPage}
 @app.get("/api/cats/{itemsPerPage}/{currentPage}", response_model=Cat21PaginatedResult)
-async def get_cats(itemsPerPage: int, currentPage: int):
-    # Calculate the offset
+async def get_cats(itemsPerPage: int = 10, currentPage: int = 1):
+    # Calculate how many pages we got
+    total_pages = math.ceil(1.0 * len(all_cats) / itemsPerPage)
+
+    # Calculate the offset based on currentPage that counts from 1
     offset = (currentPage - 1) * itemsPerPage
     if offset > len(all_cats):
         # Pagination beyond end of list
@@ -149,7 +155,8 @@ async def get_cats(itemsPerPage: int, currentPage: int):
     cats = all_cats[offset : offset + itemsPerPage]
     return Cat21PaginatedResult(
         cats = cats,
-        totalResults = len(all_cats),
-        itemsPerPage = itemsPerPage,
         currentPage = currentPage,
+        itemsPerPage = itemsPerPage,
+        totalResults = len(all_cats),
+        totalPages = total_pages,
     )
