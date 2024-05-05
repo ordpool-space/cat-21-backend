@@ -3,8 +3,10 @@ import sys
 import time
 import logging
 import datetime
+from typing import List
 import psycopg2
 from fastapi import FastAPI
+from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
@@ -31,7 +33,6 @@ class StatusResult(BaseModel):
     lastSuccessfulExecution: str
     uptime: int
 
-
 class Cat(BaseModel):
     cat_number: int
     block_height: int
@@ -39,6 +40,12 @@ class Cat(BaseModel):
     minted_by: str
     feerate: float
     tx_hash: str
+
+class Cat21PaginatedResult(BaseModel):
+    cats: List[Cat]
+    totalResults: int
+    itemsPerPage: int
+    currentPage: int
 
 
 def get_db_connection():
@@ -65,7 +72,7 @@ def on_startup():
         logging.info(
             f"Connected to database with server time {current_time[0].strftime('%Y-%m-%d %H:%M')} UTC"
         )
-        
+
         # Load dataset into memory
         cur.execute(
             """
@@ -95,10 +102,10 @@ def on_startup():
 async def lifespan(app: FastAPI):
     # Logic on startup
     on_startup()
-    
+
     # Ready to process requests
     yield
-    
+
     # Logic on shutdown
     # ...
 
@@ -121,4 +128,28 @@ async def get_status():
         indexedCats=len(all_cats),
         lastSuccessfulExecution=all_cats[-1].minted_at.isoformat(),
         uptime=uptime,
+    )
+
+# API endpoint /api/cats/{itemsPerPage}/{currentPage}
+@app.get("/api/cats/{itemsPerPage}/{currentPage}", response_model=Cat21PaginatedResult)
+async def get_cats(itemsPerPage: int, currentPage: int):
+    # Calculate the offset
+    offset = (currentPage - 1) * itemsPerPage
+    if offset > len(all_cats):
+        # Pagination beyond end of list
+        raise HTTPException(404, {
+            "statusCode": 404,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "path": f"/api/cats/{itemsPerPage}/{currentPage}",
+            "message": "Pagination beyond end of list"
+            }
+        )
+
+    # Get the cats from the in-memory cache
+    cats = all_cats[offset : offset + itemsPerPage]
+    return Cat21PaginatedResult(
+        cats = cats,
+        totalResults = len(all_cats),
+        itemsPerPage = itemsPerPage,
+        currentPage = currentPage,
     )
