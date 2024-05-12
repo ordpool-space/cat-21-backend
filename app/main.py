@@ -125,11 +125,10 @@ app = FastAPI(
 @app.get("/api/status", response_model=StatusResult)
 async def get_status():
     uptime = int(time.time()) - STARTUP_TIME
-
     return StatusResult(
         network="mainnet",
         indexedCats=len(all_cats),
-        lastSuccessfulExecution=all_cats[-1].minted_at.isoformat(),
+        lastSuccessfulExecution=all_cats[-1].mintedAt,
         uptime=uptime,
     )
 
