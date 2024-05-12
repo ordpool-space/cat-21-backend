@@ -81,7 +81,6 @@ def on_startup():
             SELECT cat_number, block_height, minted_at, minted_by, feerate, tx_hash
             FROM cats
             ORDER BY cat_number ASC
-            LIMIT 100
             """
         )
         for item in cur.fetchall():
