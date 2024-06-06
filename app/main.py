@@ -62,8 +62,9 @@ def get_db_connection():
 # In-memory caches
 all_cats = []
 cat_by_number = defaultdict(Cat)
-cat_by_minted_by = defaultdict(list)
-
+cat_by_txhash = defaultdict(Cat)
+cats_by_minted_by = defaultdict(list)
+cats_by_block_id = defaultdict(list)
 
 def on_startup():
     conn = get_db_connection()
@@ -83,6 +84,7 @@ def on_startup():
             ORDER BY cat_number ASC
             """
         )
+
         for item in cur.fetchall():
             cat = Cat(
                 catNumber=item["cat_number"],
@@ -94,7 +96,10 @@ def on_startup():
             )
             all_cats.append(cat)
             cat_by_number[cat.catNumber] = cat
-            cat_by_minted_by[cat.mintedBy].append(cat)
+            cat_by_txhash[cat.txHash] = cat
+            cats_by_minted_by[cat.mintedBy].append(cat)
+            cats_by_block_id[cat.blockHeight].append(cat)
+
         logging.info(f"Loaded {len(all_cats)} cats into in-memory cache")
         assert cat_by_number[0].mintedBy == "bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh"
 
@@ -120,8 +125,8 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-
-@app.get("/api/status", response_model=StatusResult)
+# Status info about API and dataset
+@app.get("/api/status", response_model=StatusResult, description="Get status info about API and dataset")
 async def get_status():
     uptime = int(time.time()) - STARTUP_TIME
     return StatusResult(
@@ -131,8 +136,36 @@ async def get_status():
         uptime=uptime,
     )
 
-# API endpoint /api/cats/{itemsPerPage}/{currentPage}
-@app.get("/api/cats/{itemsPerPage}/{currentPage}", response_model=Cat21PaginatedResult)
+# Look up an individual cat by transaction ID
+@app.get("/api/cat/{transactionId}", response_model=Cat, description="Get single CAT-21 by transaction ID")
+async def get_cat(transactionId: str):
+    if transactionId not in cat_by_txhash:
+        raise HTTPException(status_code=404, detail="Transaction ID not found")
+    return cat_by_txhash[transactionId]
+
+# Look up an individual cat by cat number (starting from zero)
+@app.get("/api/cat/by-num/{catNumber}", response_model=Cat, description="Get single CAT-21 by cat number (starting from zero)")
+async def get_cat(catNumber: int):
+    if catNumber < 0 or catNumber >= len(all_cats):
+        raise HTTPException(status_code=404, detail=f"Requested cat number is out of range (0-{len(all_cats)-1})")
+    return cat_by_number[catNumber]
+
+# Get all cats minted to one address
+@app.get("/api/cats/by-address/{address}", response_model=List[Cat], description="Get all CAT-21s minted to one address")
+async def get_cats(address: str):
+    if address not in cats_by_minted_by:
+        raise HTTPException(status_code=404, detail="Address not found")
+    return cats_by_minted_by[address]
+
+# Get all cats minted in one block by block ID (hash of the block in hex format)
+@app.get("/api/cats/by-block-id/{blockId}", response_model=List[Cat], description="Get all CAT-21s minted in one block by block ID (hash of the block in hex format)")
+async def get_cats(blockId: int):
+    if blockId not in cats_by_block_id:
+        raise HTTPException(status_code=404, detail="Specified block ID not found")
+    return cats_by_block_id[blockId]
+
+# Paginated API endpoint to list all cats
+@app.get("/api/cats/{itemsPerPage}/{currentPage}", response_model=Cat21PaginatedResult, description="Paginated API endpoint to get all CAT-21s")
 async def get_cats(itemsPerPage: int = 10, currentPage: int = 1):
     # Input validation
     if currentPage < 1 or itemsPerPage < 1:
