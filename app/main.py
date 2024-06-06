@@ -138,35 +138,35 @@ async def get_status():
 
 # Look up an individual cat by transaction ID
 @app.get("/api/cat/{transactionId}", response_model=Cat, description="Get single CAT-21 by transaction ID")
-async def get_cat(transactionId: str):
+async def get_cat_by_transaction_id(transactionId: str):
     if transactionId not in cat_by_txhash:
         raise HTTPException(status_code=404, detail="Transaction ID not found")
     return cat_by_txhash[transactionId]
 
 # Look up an individual cat by cat number (starting from zero)
 @app.get("/api/cat/by-num/{catNumber}", response_model=Cat, description="Get single CAT-21 by cat number (starting from zero)")
-async def get_cat(catNumber: int):
+async def get_cat_by_number(catNumber: int):
     if catNumber < 0 or catNumber >= len(all_cats):
         raise HTTPException(status_code=404, detail=f"Requested cat number is out of range (0-{len(all_cats)-1})")
     return cat_by_number[catNumber]
 
 # Get all cats minted to one address
 @app.get("/api/cats/by-address/{address}", response_model=List[Cat], description="Get all CAT-21s minted to one address")
-async def get_cats(address: str):
+async def get_cats_minted_to_address(address: str):
     if address not in cats_by_minted_by:
         raise HTTPException(status_code=404, detail="Address not found")
     return cats_by_minted_by[address]
 
 # Get all cats minted in one block by block ID (hash of the block in hex format)
 @app.get("/api/cats/by-block-id/{blockId}", response_model=List[Cat], description="Get all CAT-21s minted in one block by block ID (hash of the block in hex format)")
-async def get_cats(blockId: int):
+async def get_cats_by_block_id(blockId: int):
     if blockId not in cats_by_block_id:
         raise HTTPException(status_code=404, detail="Specified block ID not found")
     return cats_by_block_id[blockId]
 
 # Paginated API endpoint to list all cats
 @app.get("/api/cats/{itemsPerPage}/{currentPage}", response_model=Cat21PaginatedResult, description="Paginated API endpoint to get all CAT-21s")
-async def get_cats(itemsPerPage: int = 10, currentPage: int = 1):
+async def get_all_cats_paginated(itemsPerPage: int = 10, currentPage: int = 1):
     # Input validation
     if currentPage < 1 or itemsPerPage < 1:
         raise HTTPException(404, {
